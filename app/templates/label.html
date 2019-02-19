@@ -6,6 +6,7 @@
 
             document.addEventListener('contextmenu', event => event.preventDefault());
 
+            var video_fps = 15
             var SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
             var colors = {{ colors|safe }};
             var labels = {{ labels|safe }};
@@ -16,14 +17,14 @@
             var current_frame = parseInt(num_frames_in_timeline/2);
             var annotate_for = 3;
             var active_label = '{{ active_label }}';
-            var total_time = num_frames*1.25 / 15;
+            var total_time = num_frames / video_fps;
 
             setInterval(monitor, 50);
 
             function monitor() {
                 // Rebuild label timeline based on currentTime in video
                 var v = $('video').get(0),
-                    current_index = parseInt(v.currentTime * 15/1.25);
+                    current_index = parseInt(v.currentTime * video_fps);
 
                 for (var i=current_index-current_frame; i<current_index+current_frame+1; i++)
                 {
@@ -87,7 +88,7 @@
                 event.preventDefault();
 
                 var v = $('video').get(0),
-                    video_index = parseInt(v.currentTime * 15/1.25),
+                    video_index = parseInt(v.currentTime * video_fps),
                     current_index = video_index - current_frame + parseInt($(this).attr('id'));
 
                 switch (event.which) {
@@ -96,7 +97,7 @@
                         annotate(current_index, active_label);
                         break;
                     case 2:
-                        v.currentTime = (current_index*1.25)/15;
+                        v.currentTime = current_index / video_fps;
                         break;
                     case 3:
                         current_label = labels[colors.indexOf(rgb2hex($("#" + parseInt($(this).attr('id'))).css('background-color')))];

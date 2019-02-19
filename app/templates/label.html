@@ -1,0 +1,288 @@
+{% extends "layout.html" %}
+{% block body %}
+
+    <script>
+        $(function () {
+
+            document.addEventListener('contextmenu', event => event.preventDefault());
+
+            var SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+            var colors = {{ colors|safe }};
+            var labels = {{ labels|safe }};
+            var num_frames = {{ annotations|length }};
+            var annotations = {{ annotations|safe }};
+
+            var num_frames_in_timeline = {{ num_frames_in_timeline }};
+            var current_frame = parseInt(num_frames_in_timeline/2);
+            var annotate_for = 3;
+            var active_label = '{{ active_label }}';
+            var total_time = num_frames*1.25 / 15;
+
+            setInterval(monitor, 50);
+
+            function monitor() {
+                // Rebuild label timeline based on currentTime in video
+                var v = $('video').get(0),
+                    current_index = parseInt(v.currentTime * 15/1.25);
+
+                for (var i=current_index-current_frame; i<current_index+current_frame+1; i++)
+                {
+                    if (i < 0 || i >= num_frames)
+                        $("#"+(i - current_index + current_frame)).css('background-color', '#CCC');
+                    else {
+                        $("#" + (i - current_index + current_frame)).css('background-color', colors[annotations[i]]);
+                    }
+                }
+
+                $("#label_placeholder").css('color', colors[annotations[current_index]]);
+                $("#label_placeholder").text(labels[annotations[current_index]]);
+
+
+                if (!$("#time_left").is(":focus"))
+                    $("#time_left").val(convert_to_time(total_time - v.currentTime));
+
+                if (!$("#current_time").is(":focus"))
+                    $("#current_time").val(convert_to_time(v.currentTime));
+
+            }
+
+            $('.label_element').mouseenter(function() {
+
+                var parsed_id = parseInt(this.id);
+
+
+                for (var i = parsed_id-parseInt((annotate_for-1)/2); i <= parsed_id+parseInt((annotate_for-1)/2); i++)
+                {
+                    $('#' + i).css('border-bottom', '2px solid black');
+                    $('#' + i).css('border-top', '2px solid black');
+                }
+
+                $('#' + (parsed_id-parseInt((annotate_for-1)/2))).css('border-left', '2px solid black');
+                $('#' + (parsed_id+parseInt((annotate_for-1)/2) + 1)).css('border-left', '2px solid black');
+            });
+            $('.label_element').mouseleave(function() {
+
+                var parsed_id = parseInt(this.id);
+                for (var i = parsed_id-parseInt((annotate_for-1)/2); i <= parsed_id+parseInt((annotate_for-1)/2)+1; i++)
+                    $('#' + i).css('border', 'none');
+
+
+            });
+
+            $("#time_left").change(function()
+            {
+                var v = $('video').get(0);
+                v.currentTime = total_time - time_to_seconds($(this).val());
+            });
+
+            $("#current_time").change(function()
+            {
+                var v = $('video').get(0);
+                v.currentTime = time_to_seconds($(this).val());
+            });
+
+
+            $('.label_element').mousedown(function(event){
+
+                event.preventDefault();
+
+                var v = $('video').get(0),
+                    video_index = parseInt(v.currentTime * 15/1.25),
+                    current_index = video_index - current_frame + parseInt($(this).attr('id'));
+
+                switch (event.which) {
+
+                    case 1:
+                        annotate(current_index, active_label);
+                        break;
+                    case 2:
+                        v.currentTime = (current_index*1.25)/15;
+                        break;
+                    case 3:
+                        current_label = labels[colors.indexOf(rgb2hex($("#" + parseInt($(this).attr('id'))).css('background-color')))];
+                        label_left = labels[colors.indexOf(rgb2hex($("#" + (parseInt($(this).attr('id'))-annotate_for)).css('background-color')))];
+                        label_right = labels[colors.indexOf(rgb2hex($("#" + (parseInt($(this).attr('id'))+annotate_for)).css('background-color')))];
+
+                        annotate(current_index, (current_label == label_left)? label_right : label_left);
+                        break;
+                    default:
+                        break;
+                }
+
+            });
+
+
+
+            $(".legend").click(function(){
+
+                $('#' + active_label).css('text-decoration', 'none');
+                $('#' + active_label).css('font-weight', 'normal');
+
+                active_label = $(this).attr('id');
+
+                $('#' + active_label).css('text-decoration', 'underline');
+                $('#' + active_label).css('font-weight', 'bold');
+            });
+
+            $("#label_placeholder").dblclick(function(event){
+
+                event.preventDefault();
+
+                $('#' + active_label).css('text-decoration', 'none');
+                $('#' + active_label).css('font-weight', 'normal');
+
+                active_label = 'other_events';
+
+                $('#' + active_label).css('text-decoration', 'underline');
+                $('#' + active_label).css('font-weight', 'bold');
+            });
+
+
+            $(window).keypress(function (e) {
+                if (e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault()
+                    var v = $('video').get(0)
+                    if (v.paused)
+                        v.play()
+                    else
+                        v.pause();
+
+                }
+            })
+
+
+
+            function annotate(index, label)
+            {
+                var data = {target: '{{ target }}', filename: '{{ filename }}', index: index, label: label, annotate_for: annotate_for};
+
+                $.ajax({
+                    url: SCRIPT_ROOT + '/annotate2',
+                    data: data,
+                    context: this,
+                    dataType: "json",
+                    type: "POST",
+                    success: function (data) {
+                        for (var i = index-parseInt((annotate_for-1)/2); i <= index+parseInt((annotate_for-1)/2); i++)
+                            annotations[i] = labels.indexOf(label);
+                    }
+                });
+            }
+
+
+            var hexDigits = new Array("0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f");
+
+            function convert_to_time(seconds)
+            {
+                return str_pad_left(Math.floor(seconds/60)) + ":" + str_pad_left(Math.floor(seconds)%60)
+            }
+
+            function time_to_seconds(time)
+            {
+                return parseInt(time.substring(0, 2)) * 60 + parseInt(time.substring(3));
+            }
+
+            function str_pad_left(string) {
+                return (new Array(2+1).join('0')+string).slice(-2);
+            }
+
+            //Function to convert rgb color to hex format
+            function rgb2hex(rgb) {
+             rgb = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+             return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+            }
+
+            function hex(x) {
+              return isNaN(x) ? "00" : hexDigits[(x - x % 16) / 16] + hexDigits[x % 16];
+             }
+
+        });
+    </script>
+    <div id="t"></div>
+    <div class="container">
+
+        <div class="title">Labeling</div>
+
+        <div style="display:inline-block;position:relative;vertical-align:top; margin:0 50px;">
+            {% for s in sessions %}
+                <div class="form_element">
+                    <button class="btn btn_gray">{{ s }}</button>
+                </div>
+            {% endfor %}
+
+            <div class="form_element">
+                <input type="text" class="form-control" placeholder="Target" id="target" value="{{ target }}"
+                       style="margin-top:3px;width:200px;"/>
+            </div>
+
+        </div>
+
+
+        <div id="info" style="display:block; position:relative">
+            <div style="padding:20px">
+                <div style="display:inline-block; ;text-align: center;font-size:14pt;">
+                    <span class="highlight">{{ target }}</span><span>{{ filename }}</span>
+                </div>
+                <div style="display:inline-block; float:right;">
+                    <!--<div class="top-button-style" style="font-weight:bold;cursor:pointer">&#62;</div>
+                    <div class="top-button-style" style="font-weight:bold;cursor:pointer">&#62;&#62;</div>
+                    <div class="top-button-style" style="font-weight:bold;cursor:pointer;margin-right:35px;">&#62;&#62;&#62;</div>-->
+                    <input type="text" class="top-button-style" id="current_time" value="00:00" style="width:50px"/>
+                    <input type="text" class="top-button-style" id="time_left" value="00:00" style="width:50px"/>
+
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:10px;">
+
+            <div id="{{filename}}" class="recording" style="position:relative;" data-label="other_events" data-identifier="{{filename}}">
+
+                <div style="width:640px;display:block; margin:0 auto">
+                    <video width="640" height="360" class="video" data-identifier="{{filename}}" src="{{ url_for('static', filename='recordings/') + target + '/' + filename }}.mp4" type="video/mp4" onclick="this.paused ? this.play() : this.pause();"></video>
+                </div>
+
+
+                <div id="labels" style="margin-top:15px" >
+                    <div id="timeline" >
+                        <div style="position:absolute;left:{{num_pixels*num_frames_in_timeline//2}}px;top:-10px;width:{{ num_pixels }}px;height:100%;background-color:#000; "></div>
+                        <div style="position:relative">
+                            {%  for j in range(num_frames_in_timeline) %}
+                                <div id="{{ j }}" class="label_element"  style="cursor:pointer; position:absolute; left:{{ j*num_pixels }}px;height:30px; width:{{ num_pixels }}px; background-color:#CCC" ></div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+                    <div id='label_placeholder'  style="width:100%;height:100%;text-align:center; font-weight:bold">
+
+                    </div>
+
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id='info_panel' style="position:absolute; top:314px; left:0px;">
+        <table>
+            {% for index in range(labels|length) %}
+
+                {%  if active_label == labels[index] %}
+                   <tr style="cursor:pointer;text-decoration: underline;font-weight:bold" id="{{ labels[index]}}" class="legend">
+                {% else %}
+                    <tr style="cursor:pointer;" id="{{ labels[index]}}" class="legend">
+                {% endif %}
+
+                    <td style='width:50px; background-color:{{colors[index]}}'></td>
+                <td>{{ labels[index] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+
+{% endblock %}
+

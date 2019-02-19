@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Record Application</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery-ui.css')}}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+
+    <script src="{{ url_for('static', filename='js/jquery-1.12.4.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery-ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.io-1.4.5.js') }}"></script>
+
+
+
+
+</head>
+
+<header>
+    <div class="container">
+      <div class="title">radarland</div>
+      <div class="navbar">
+          <ul>
+              <li><a href="{{ url_for('info.label') }}" class="{{'active' if 'overview' in request.url_rule.rule else ''}}">label</a></li>
+          </ul>
+      </div>
+    </div>
+</header>
+
+<section>
+
+  <div class="body">
+  {% block body %}{% endblock %}
+  </div>
+</section>
+
+
+<footer>
+
+</footer>
